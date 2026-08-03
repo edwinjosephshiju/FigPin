@@ -192,7 +192,50 @@ namespace FigPin
             {
                 root = baseDir;
             }
+
+            // Test directory writability (WindowsApps directory is read-only)
+            try
+            {
+                string testFile = Path.Combine(root, ".write_test");
+                File.WriteAllText(testFile, "test");
+                File.Delete(testFile);
+            }
+            catch
+            {
+                // Root is read-only (packaged MSIX mode), use %LOCALAPPDATA%\FigPin
+                string appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FigPin");
+                Directory.CreateDirectory(appDataRoot);
+
+                string backendAppData = Path.Combine(appDataRoot, "backend");
+                string backendPackage = Path.Combine(baseDir, "backend");
+                if (!Directory.Exists(backendAppData) && Directory.Exists(backendPackage))
+                {
+                    CopyDirectory(backendPackage, backendAppData);
+                }
+                root = appDataRoot;
+            }
+
             return root;
+        }
+
+        private static void CopyDirectory(string sourceDir, string destinationDir)
+        {
+            var dir = new DirectoryInfo(sourceDir);
+            if (!dir.Exists) return;
+
+            Directory.CreateDirectory(destinationDir);
+
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                file.CopyTo(targetFilePath, true);
+            }
+
+            foreach (DirectoryInfo subDir in dir.GetDirectories())
+            {
+                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                CopyDirectory(subDir.FullName, newDestinationDir);
+            }
         }
 
         private async Task InstallDependenciesNativeAsync(string rootDir, string backendDir)
