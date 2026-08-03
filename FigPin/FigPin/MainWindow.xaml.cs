@@ -272,7 +272,6 @@ namespace FigPin
             try
             {
                 // Attempt to resolve Windows.Storage.ApplicationData.Current.LocalFolder (MSIX Packaged Mode)
-                // This ensures all venvs, model weights, and outputs are automatically deleted on MSIX uninstall!
                 string packageLocalFolder = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
                 string appDataRoot = Path.Combine(packageLocalFolder, "FigPinStudio");
                 Directory.CreateDirectory(appDataRoot);
@@ -310,6 +309,14 @@ namespace FigPin
 
                 return baseDir;
             }
+        }
+
+        private static string GetOutputsRootDir()
+        {
+            string downloadsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            string outputDir = Path.Combine(downloadsDir, "FigPin outputs");
+            Directory.CreateDirectory(outputDir);
+            return outputDir;
         }
 
         private static void CopyDirectory(string sourceDir, string destinationDir)
@@ -795,10 +802,7 @@ namespace FigPin
                     {
                         isFinished = true;
                         
-                        string projectRoot = GetProjectRootDir();
-                        string rootOutputDir = Path.Combine(projectRoot, "output");
-                        Directory.CreateDirectory(rootOutputDir);
-
+                        string rootOutputDir = GetOutputsRootDir();
                         _currentJobDir = Path.Combine(rootOutputDir, jobId);
                         Directory.CreateDirectory(_currentJobDir);
 
@@ -968,16 +972,16 @@ namespace FigPin
 
         private void ShowErrorState(string errorMessage)
         {
-            DropPrompt.Visibility = Visibility.Visible;
+            DropPrompt.Visibility = Visibility.Collapsed;
             FooterInfoText.Text = errorMessage;
         }
 
         private void ExportBtn_Click(object sender, RoutedEventArgs e)
         {
-            string projectRoot = GetProjectRootDir();
+            string rootOutputDir = GetOutputsRootDir();
             string targetFolder = !string.IsNullOrEmpty(_currentJobDir) && Directory.Exists(_currentJobDir)
                 ? _currentJobDir
-                : Path.Combine(projectRoot, "output");
+                : rootOutputDir;
 
             if (!Directory.Exists(targetFolder))
             {

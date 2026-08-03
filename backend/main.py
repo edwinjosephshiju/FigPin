@@ -19,8 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ROOT_PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-OUTPUT_DIR = os.path.join(ROOT_PROJECT_DIR, "output")
+# Output directory saved directly into User's Downloads folder under 'FigPin outputs'
+USER_DOWNLOADS_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
+OUTPUT_DIR = os.path.join(USER_DOWNLOADS_DIR, "FigPin outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
