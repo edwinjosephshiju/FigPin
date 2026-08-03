@@ -1,0 +1,274 @@
+<Window
+    x:Class="FigPin.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FigPin"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="FigPin Layer Separator Studio">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop Kind="Base" />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="0">
+        <Grid.RowDefinitions>
+            <!-- Custom Title Bar with Mica Extended Background -->
+            <RowDefinition Height="Auto"/>
+            <!-- Main Window Content -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Custom Mica Extended Title Bar -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Height="44" Padding="16,0" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image x:Name="TitleBarIcon" Width="22" Height="22" Source="Assets/FigPin.png" VerticalAlignment="Center"/>
+                <TextBlock Text="FigPin Layer Separator Studio" Style="{StaticResource CaptionTextBlockStyle}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                <TextBlock x:Name="GpuBadgeText" Text="• Detecting Hardware..." Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" VerticalAlignment="Center" FontSize="11" Margin="4,0,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Content Area -->
+        <Grid Grid.Row="1" Padding="24,12,24,24" RowSpacing="18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Main Header Section with Figma Styled Tab Bar -->
+            <Grid Grid.Row="0" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- App Branding -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Image Source="Assets/FigPin.png" Width="36" Height="36" VerticalAlignment="Center"/>
+                    <StackPanel Spacing="0">
+                        <TextBlock Text="FigPin Layer Separator Studio" Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Bold" FontSize="18"/>
+                        <TextBlock Text="AI Layer Deconstruction &amp; Photoshop PSD Studio" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Figma Styled Native 3-Tab Switcher -->
+                <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" 
+                        Background="#18181B" CornerRadius="10" Padding="4" BorderBrush="#27272A" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="TabStudioBtn" Click="TabBtn_Click" Tag="0" Style="{StaticResource AccentButtonStyle}" CornerRadius="6" Padding="12,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE80F;" FontSize="14"/>
+                                <TextBlock Text="Studio Workspace" FontWeight="SemiBold" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="TabLauncherBtn" Click="TabBtn_Click" Tag="1" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" CornerRadius="6" Padding="12,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE756;" FontSize="14"/>
+                                <TextBlock Text="AI Terminal Logs" FontWeight="SemiBold" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="TabBackendBtn" Click="TabBtn_Click" Tag="2" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" CornerRadius="6" Padding="12,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE968;" FontSize="14"/>
+                                <TextBlock Text="Backend Server Logs" FontWeight="SemiBold" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- Controls Panel: Potency Rate & Backend Health Badge -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <!-- Potency Rate Selector -->
+                    <Border CornerRadius="8" Padding="10,5" Background="#1F1F22" BorderBrush="#3F3F46" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE945;" FontSize="14" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}"/>
+                            <TextBlock Text="Potency:" Style="{StaticResource BodyStrongTextBlockStyle}" VerticalAlignment="Center" FontSize="12"/>
+                            <ComboBox x:Name="PotencyComboBox" SelectedIndex="0" Width="135" Padding="6,2" SelectionChanged="PotencyComboBox_SelectionChanged">
+                                <ComboBoxItem Content="1X (Standard)"/>
+                                <ComboBoxItem Content="2X (Enhanced)"/>
+                                <ComboBoxItem Content="4X (High Detail)"/>
+                                <ComboBoxItem Content="6X (Max Quality)"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Backend Health Badge -->
+                    <Border x:Name="StatusBadge" CornerRadius="8" Padding="12,6" Background="#1F1F22" VerticalAlignment="Center" BorderBrush="#3F3F46" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Ellipse x:Name="StatusDot" Width="9" Height="9" Fill="#FF9800"/>
+                            <TextBlock x:Name="StatusText" Text="Connecting..." Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="12"/>
+                            <Button x:Name="RetryServerBtn" Content="Refresh" Click="RetryServerBtn_Click" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" Padding="6,2" Visibility="Collapsed" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- Main Workspace Container (Swapped by Tab Selection) -->
+            <Grid Grid.Row="1">
+                <!-- TAB 0: Studio Workspace -->
+                <Grid x:Name="StudioViewGrid" ColumnSpacing="20" Visibility="Visible">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="340"/>
+                        <ColumnDefinition Width="1.3*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Zone: Image Input & Live Processing -->
+                    <Grid Grid.Column="0">
+                        <Border x:Name="DropArea" 
+                                Background="#161618" 
+                                CornerRadius="14" 
+                                BorderBrush="#3F3F46" 
+                                BorderThickness="2"
+                                AllowDrop="True" 
+                                Drop="DropArea_Drop" 
+                                DragOver="DropArea_DragOver"
+                                DragLeave="DropArea_DragLeave">
+                            
+                            <Grid Padding="24">
+                                <!-- Drop Prompt -->
+                                <StackPanel x:Name="DropPrompt" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="14">
+                                    <Border Width="80" Height="80" CornerRadius="40" Background="#232326" HorizontalAlignment="Center">
+                                        <Image Source="Assets/FigPin.png" Width="44" Height="44" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="Drag &amp; Drop Image / Poster" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" FontWeight="Bold"/>
+                                    <TextBlock Text="PNG, JPG, JPEG, WEBP or BMP formats" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
+                                    
+                                    <Button x:Name="BrowseBtn" Content="Browse Image File" Click="BrowseBtn_Click" HorizontalAlignment="Center" Margin="0,8,0,0" Style="{StaticResource AccentButtonStyle}" Padding="16,8"/>
+                                </StackPanel>
+
+                                <!-- Live Percentage Loading State -->
+                                <StackPanel x:Name="LoadingState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="18" Visibility="Collapsed" Width="280">
+                                    <ProgressRing x:Name="LoadingRing" IsActive="True" Width="52" Height="52"/>
+                                    
+                                    <ProgressBar x:Name="ProcessingProgressBar" Minimum="0" Maximum="100" Value="0" Height="10" CornerRadius="5"/>
+
+                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                        <TextBlock x:Name="ProgressPercentText" Text="0%" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" FontWeight="Bold" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}"/>
+                                        <TextBlock x:Name="ProcessingStatusText" Text="Separating Layers..." Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Input Image Loaded Preview -->
+                                <Grid x:Name="InputPreviewGrid" Visibility="Collapsed">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Image x:Name="InputPreviewImage" Stretch="Uniform" Margin="0,0,0,14"/>
+                                    <Button Grid.Row="1" Content="Select Another Image" Click="BrowseBtn_Click" HorizontalAlignment="Center"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Right Zone: Layer Cards List -->
+                    <Grid Grid.Column="1">
+                        <Border Background="#121214" CornerRadius="14" Padding="20" BorderBrush="#27272A" BorderThickness="1">
+                            <Grid RowSpacing="16">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Deconstructed Layers &amp; Photoshop PSD" Style="{StaticResource SubtitleTextBlockStyle}" FontWeight="Bold"/>
+
+                                <!-- Placeholder -->
+                                <StackPanel x:Name="NoLayersPlaceholder" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                                    <Image Source="Assets/FigPin.png" Width="48" Height="48" Opacity="0.5" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="No layers extracted yet" Style="{StaticResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Drop an image on the left panel to begin AI processing" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                </StackPanel>
+
+                                <!-- Dynamic Layers List -->
+                                <ScrollViewer x:Name="LayersScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                    <StackPanel x:Name="LayersStackPanel" Spacing="14">
+                                        <!-- Populated dynamically in C# code-behind -->
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <!-- TAB 1: AI Terminal Logs View -->
+                <Grid x:Name="LauncherTerminalGrid" Visibility="Collapsed">
+                    <Border Background="#09090B" CornerRadius="14" BorderBrush="#27272A" BorderThickness="1" Padding="20">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE756;" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" FontSize="18"/>
+                                    <TextBlock Text="FigPin Layer Separator Studio - AI Terminal Logs" FontWeight="Bold" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                </StackPanel>
+                                <Button Content="Clear Logs" Click="ClearLauncherLogs_Click" HorizontalAlignment="Right" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" Padding="10,4"/>
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1" x:Name="LauncherLogScrollViewer" VerticalScrollBarVisibility="Auto">
+                                <TextBox x:Name="LauncherLogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" 
+                                         FontFamily="Consolas, Cascadia Code, Courier New" FontSize="12" Background="Transparent" BorderThickness="0"
+                                         Foreground="#38BDF8"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- TAB 2: Backend Server Terminal Logs View -->
+                <Grid x:Name="BackendTerminalGrid" Visibility="Collapsed">
+                    <Border Background="#09090B" CornerRadius="14" BorderBrush="#27272A" BorderThickness="1" Padding="20">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE968;" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" FontSize="18"/>
+                                    <TextBlock Text="FastAPI Backend AI Server Terminal (Uvicorn)" FontWeight="Bold" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                                </StackPanel>
+                                <Button Content="Clear Logs" Click="ClearBackendLogs_Click" HorizontalAlignment="Right" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" Padding="10,4"/>
+                            </Grid>
+
+                            <ScrollViewer Grid.Row="1" x:Name="BackendLogScrollViewer" VerticalScrollBarVisibility="Auto">
+                                <TextBox x:Name="BackendLogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" 
+                                         FontFamily="Consolas, Cascadia Code, Courier New" FontSize="12" Background="Transparent" BorderThickness="0"
+                                         Foreground="#4ADE80"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- Footer Action Toolbar -->
+            <Grid Grid.Row="2" ColumnSpacing="14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="FooterInfoText" Text="Ready." VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                    <Button x:Name="ExportBtn" Click="ExportBtn_Click" IsEnabled="False" Style="{StaticResource AccentButtonStyle}" Padding="16,8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xEC50;" FontSize="16"/>
+                            <TextBlock Text="Open Layer Output Directory" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

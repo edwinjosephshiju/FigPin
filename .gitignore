@@ -1,0 +1,30 @@
+# Windows / Visual Studio Build Artifacts
+bin/
+obj/
+dist/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Python Virtual Environment & Cache
+backend/FigPin/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# AI Model Weights & Cache (Downloaded automatically by download_models.py)
+backend/models/
+*.pt
+*.pth
+*.onnx
+
+# Output directories & generated test files
+output/
+test*.psd
+test*.png
+
+# Certificate PFX files
+*.pfx

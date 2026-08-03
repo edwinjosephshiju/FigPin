@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+easyocr
+opencv-python
+rembg
+onnxruntime-gpu
+psd-tools
+pillow

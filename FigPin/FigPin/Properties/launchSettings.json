@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "FigPin (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "FigPin (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
