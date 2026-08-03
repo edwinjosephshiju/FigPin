@@ -32,7 +32,7 @@
   <Applications>
     <Application Id="App"
       Executable="$targetnametoken$.exe"
-      EntryPoint="$targetentrypoint$">
+      EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="FigPin"
         Description="Deconstruct graphics and posters into isolated PNG layers &amp; AI background reconstructions"

@@ -1,8 +1,10 @@
 using Microsoft.UI;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Diagnostics;
@@ -32,34 +34,83 @@ namespace FigPin
         private ContentDialog? _installDialog;
         private ProgressBar? _installProgressBar;
         private TextBlock? _installStatusText;
+        private bool _titleBarConfigured = false;
 
         public MainWindow()
         {
-            this.InitializeComponent();
+            try
+            {
+                this.InitializeComponent();
 
-            // Configure Mica backdrop extension into Title Bar
-            ConfigureCustomTitleBar();
+                this.Activated += MainWindow_Activated;
 
-            // Set click-to-open on input preview image
-            InputPreviewImage.PointerPressed += InputPreviewImage_PointerPressed;
-            ToolTipService.SetToolTip(InputPreviewImage, "Click to open in Windows Photos viewer");
+                // Set click-to-open on input preview image
+                InputPreviewImage.PointerPressed += InputPreviewImage_PointerPressed;
+                ToolTipService.SetToolTip(InputPreviewImage, "Click to open in Windows Photos viewer");
 
-            _isInitializingPotency = false;
+                _isInitializingPotency = false;
 
-            // Start Native C# Dependency Manager & Backend Server
-            _ = InitializeDependencyEnvironmentAsync();
+                // Start Native C# Dependency Manager & Backend Server
+                _ = InitializeDependencyEnvironmentAsync();
+            }
+            catch (Exception ex)
+            {
+                LogCrash("MainWindow Constructor", ex);
+            }
+        }
+
+        private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+        {
+            if (!_titleBarConfigured)
+            {
+                _titleBarConfigured = true;
+                ConfigureCustomTitleBar();
+            }
+        }
+
+        private static void LogCrash(string context, Exception ex)
+        {
+            try
+            {
+                string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".figpin");
+                Directory.CreateDirectory(logDir);
+                string crashFile = Path.Combine(logDir, "crash.log");
+                File.AppendAllText(crashFile, $"[{DateTime.Now}] CRASH IN {context}:\n{ex.Message}\n{ex.StackTrace}\n\n");
+            }
+            catch { }
         }
 
         private void ConfigureCustomTitleBar()
         {
             try
             {
-                this.ExtendsContentIntoTitleBar = true;
-                this.SetTitleBar(AppTitleBar);
-
                 IntPtr hwnd = WindowNative.GetWindowHandle(this);
+                if (hwnd == IntPtr.Zero) return;
+
                 WindowId windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
                 _appWindow = AppWindow.GetFromWindowId(windowId);
+
+                try
+                {
+                    if (MicaController.IsSupported())
+                    {
+                        this.SystemBackdrop = new MicaBackdrop { Kind = MicaKind.Base };
+                    }
+                }
+                catch { }
+
+                if (AppWindowTitleBar.IsCustomizationSupported())
+                {
+                    this.ExtendsContentIntoTitleBar = true;
+                    this.SetTitleBar(AppTitleBar);
+
+                    var titleBar = _appWindow.TitleBar;
+                    titleBar.BackgroundColor = Colors.Transparent;
+                    titleBar.ButtonBackgroundColor = Colors.Transparent;
+                    titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+                    titleBar.ButtonHoverBackgroundColor = Microsoft.UI.Colors.DarkGray;
+                    titleBar.ButtonPressedBackgroundColor = Microsoft.UI.Colors.Gray;
+                }
 
                 string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "FigPin.ico");
                 if (!File.Exists(iconPath))
@@ -70,20 +121,10 @@ namespace FigPin
                 {
                     _appWindow.SetIcon(iconPath);
                 }
-
-                if (AppWindowTitleBar.IsCustomizationSupported())
-                {
-                    var titleBar = _appWindow.TitleBar;
-                    titleBar.BackgroundColor = Colors.Transparent;
-                    titleBar.ButtonBackgroundColor = Colors.Transparent;
-                    titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-                    titleBar.ButtonHoverBackgroundColor = Microsoft.UI.Colors.DarkGray;
-                    titleBar.ButtonPressedBackgroundColor = Microsoft.UI.Colors.Gray;
-                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"TitleBar configuration warning: {ex.Message}");
+                LogCrash("ConfigureCustomTitleBar", ex);
             }
         }
 
@@ -100,7 +141,7 @@ namespace FigPin
         private void SwitchToTab(int tabIndex)
         {
             var activeStyle = (Style)Application.Current.Resources["AccentButtonStyle"];
-            var inactiveStyle = (Style)Application.Current.Resources["DateTimePickerFlyoutButtonStyle"];
+            var inactiveStyle = (Style)Application.Current.Resources["DefaultButtonStyle"];
 
             TabStudioBtn.Style = tabIndex == 0 ? activeStyle : inactiveStyle;
             TabLauncherBtn.Style = tabIndex == 1 ? activeStyle : inactiveStyle;
@@ -179,30 +220,12 @@ namespace FigPin
         private string GetProjectRootDir()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string root = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
-            if (!Directory.Exists(Path.Combine(root, "backend")))
-            {
-                root = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", ".."));
-            }
-            if (!Directory.Exists(Path.Combine(root, "backend")))
-            {
-                root = Path.GetFullPath(Path.Combine(baseDir, ".."));
-            }
-            if (!Directory.Exists(Path.Combine(root, "backend")))
-            {
-                root = baseDir;
-            }
 
-            // Test directory writability (WindowsApps directory is read-only)
-            try
+            // Detect if running inside WindowsApps directory (MSIX packaged mode)
+            bool isPackaged = baseDir.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase);
+
+            if (isPackaged)
             {
-                string testFile = Path.Combine(root, ".write_test");
-                File.WriteAllText(testFile, "test");
-                File.Delete(testFile);
-            }
-            catch
-            {
-                // Root is read-only (packaged MSIX mode), use %LOCALAPPDATA%\FigPin
                 string appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FigPin");
                 Directory.CreateDirectory(appDataRoot);
 
@@ -212,10 +235,26 @@ namespace FigPin
                 {
                     CopyDirectory(backendPackage, backendAppData);
                 }
-                root = appDataRoot;
+                return appDataRoot;
             }
 
-            return root;
+            // Unpackaged development mode
+            if (Directory.Exists(Path.Combine(baseDir, "backend")))
+            {
+                return baseDir;
+            }
+
+            try
+            {
+                string p1 = Path.GetFullPath(Path.Combine(baseDir, ".."));
+                if (Directory.Exists(Path.Combine(p1, "backend"))) return p1;
+
+                string p2 = Path.GetFullPath(Path.Combine(baseDir, "..", ".."));
+                if (Directory.Exists(Path.Combine(p2, "backend"))) return p2;
+            }
+            catch { }
+
+            return baseDir;
         }
 
         private static void CopyDirectory(string sourceDir, string destinationDir)
@@ -646,16 +685,12 @@ namespace FigPin
                     {
                         isFinished = true;
                         
-                        string rootOutputDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "output"));
-                        if (!Directory.Exists(rootOutputDir))
-                        {
-                            rootOutputDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "output"));
-                        }
+                        string projectRoot = GetProjectRootDir();
+                        string rootOutputDir = Path.Combine(projectRoot, "output");
+                        Directory.CreateDirectory(rootOutputDir);
+
                         _currentJobDir = Path.Combine(rootOutputDir, jobId);
-                        if (!Directory.Exists(_currentJobDir))
-                        {
-                            _currentJobDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "output", jobId);
-                        }
+                        Directory.CreateDirectory(_currentJobDir);
 
                         RenderLayersUI(root);
 
@@ -776,7 +811,7 @@ namespace FigPin
             {
                 Text = fileName,
                 Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentAAFillColorDefaultBrush"]
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemControlHighlightAccentBrush"]
             });
 
             Grid.SetColumn(stack, 1);
@@ -829,9 +864,10 @@ namespace FigPin
 
         private void ExportBtn_Click(object sender, RoutedEventArgs e)
         {
+            string projectRoot = GetProjectRootDir();
             string targetFolder = !string.IsNullOrEmpty(_currentJobDir) && Directory.Exists(_currentJobDir)
                 ? _currentJobDir
-                : Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "output"));
+                : Path.Combine(projectRoot, "output");
 
             if (!Directory.Exists(targetFolder))
             {

@@ -9,7 +9,6 @@ namespace FigPin
 
         public App()
         {
-            Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", AppContext.BaseDirectory);
             this.UnhandledException += (sender, e) =>
             {
                 try
