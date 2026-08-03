@@ -71,7 +71,15 @@ try {
 
     Write-Host ""
     Write-Host "[3/3] Installing FigPin Desktop Application..." -ForegroundColor Yellow
-    $installResult = Add-AppxPackage -Path $msixPath -ForceUpdateFromAnyVersion -ErrorAction Stop
+    
+    # Remove previous build if installed to prevent 0x80073CFB (same version, updated content)
+    $existingPackage = Get-AppxPackage -Name "edwinjoseph.FigPin" -ErrorAction SilentlyContinue
+    if ($null -ne $existingPackage) {
+        Write-Host "[INFO] Removing previous build of FigPin..." -ForegroundColor Yellow
+        Remove-AppxPackage -Package $existingPackage.PackageFullName -ErrorAction SilentlyContinue
+    }
+
+    Add-AppxPackage -Path $msixPath -ForceUpdateFromAnyVersion -ErrorAction Stop
     
     Write-Host ""
     Write-Host "======================================================================" -ForegroundColor Green
@@ -83,7 +91,7 @@ catch {
     Write-Host ""
     Write-Host "[ERROR] Installation failed: $_" -ForegroundColor Red
     Write-Host ""
-    Write-Host "If you still see certificate errors, please right-click '$cerPath' -> Install Certificate -> Local Machine -> Trusted Root Certification Authorities." -ForegroundColor Yellow
+    Write-Host "If reinstallation was blocked, try running: Remove-AppxPackage (Get-AppxPackage *FigPin*).PackageFullName" -ForegroundColor Yellow
 }
 
 Write-Host ""
