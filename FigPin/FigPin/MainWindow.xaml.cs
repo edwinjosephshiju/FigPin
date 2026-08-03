@@ -10,6 +10,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
@@ -35,6 +36,12 @@ namespace FigPin
         private ProgressBar? _installProgressBar;
         private TextBlock? _installStatusText;
         private bool _titleBarConfigured = false;
+
+        private readonly StringBuilder _launcherLogBuffer = new StringBuilder();
+        private readonly StringBuilder _backendLogBuffer = new StringBuilder();
+        private readonly object _launcherLogLock = new object();
+        private readonly object _backendLogLock = new object();
+        private const int MaxLogLength = 50000;
 
         public MainWindow()
         {
@@ -128,7 +135,7 @@ namespace FigPin
             }
         }
 
-        #region Figma Styled Tab Switcher
+        #region Figma Styled Tab Switcher & Continuous Log Streaming
 
         private void TabBtn_Click(object sender, RoutedEventArgs e)
         {
@@ -154,29 +161,61 @@ namespace FigPin
 
         private void AppendLauncherLog(string text)
         {
+            lock (_launcherLogLock)
+            {
+                _launcherLogBuffer.AppendLine(text);
+                if (_launcherLogBuffer.Length > MaxLogLength)
+                {
+                    _launcherLogBuffer.Remove(0, _launcherLogBuffer.Length - (MaxLogLength / 2));
+                }
+            }
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                LauncherLogTextBox.Text += $"{text}\n";
+                lock (_launcherLogLock)
+                {
+                    LauncherLogTextBox.Text = _launcherLogBuffer.ToString();
+                }
                 LauncherLogScrollViewer.ChangeView(null, LauncherLogScrollViewer.ScrollableHeight, null);
             });
         }
 
         private void AppendBackendLog(string text)
         {
+            lock (_backendLogLock)
+            {
+                _backendLogBuffer.AppendLine(text);
+                if (_backendLogBuffer.Length > MaxLogLength)
+                {
+                    _backendLogBuffer.Remove(0, _backendLogBuffer.Length - (MaxLogLength / 2));
+                }
+            }
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                BackendLogTextBox.Text += $"{text}\n";
+                lock (_backendLogLock)
+                {
+                    BackendLogTextBox.Text = _backendLogBuffer.ToString();
+                }
                 BackendLogScrollViewer.ChangeView(null, BackendLogScrollViewer.ScrollableHeight, null);
             });
         }
 
         private void ClearLauncherLogs_Click(object sender, RoutedEventArgs e)
         {
+            lock (_launcherLogLock)
+            {
+                _launcherLogBuffer.Clear();
+            }
             LauncherLogTextBox.Text = string.Empty;
         }
 
         private void ClearBackendLogs_Click(object sender, RoutedEventArgs e)
         {
+            lock (_backendLogLock)
+            {
+                _backendLogBuffer.Clear();
+            }
             BackendLogTextBox.Text = string.Empty;
         }
 
@@ -194,6 +233,8 @@ namespace FigPin
 
                 string rootDir = GetProjectRootDir();
                 string backendDir = Path.Combine(rootDir, "backend");
+                Directory.CreateDirectory(backendDir);
+
                 string venvPython = Path.Combine(backendDir, "FigPin", "Scripts", "python.exe");
 
                 // Check if Python virtual environment exists
@@ -228,40 +269,47 @@ namespace FigPin
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-            // Detect if running inside WindowsApps directory (MSIX packaged mode)
-            bool isPackaged = baseDir.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase);
-
-            if (isPackaged)
+            try
             {
-                string appDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FigPin");
+                // Attempt to resolve Windows.Storage.ApplicationData.Current.LocalFolder (MSIX Packaged Mode)
+                // This ensures all venvs, model weights, and outputs are automatically deleted on MSIX uninstall!
+                string packageLocalFolder = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
+                string appDataRoot = Path.Combine(packageLocalFolder, "FigPinStudio");
                 Directory.CreateDirectory(appDataRoot);
 
                 string backendAppData = Path.Combine(appDataRoot, "backend");
+                Directory.CreateDirectory(backendAppData);
+
                 string backendPackage = Path.Combine(baseDir, "backend");
-                if (!Directory.Exists(backendAppData) && Directory.Exists(backendPackage))
+                if (Directory.Exists(backendPackage))
                 {
                     CopyDirectory(backendPackage, backendAppData);
                 }
                 return appDataRoot;
             }
-
-            // Unpackaged development mode
-            if (Directory.Exists(Path.Combine(baseDir, "backend")))
+            catch
             {
+                // Unpackaged development mode
+                if (Directory.Exists(Path.Combine(baseDir, "backend")))
+                {
+                    return baseDir;
+                }
+
+                try
+                {
+                    string p1 = Path.GetFullPath(Path.Combine(baseDir, ".."));
+                    if (Directory.Exists(Path.Combine(p1, "backend"))) return p1;
+
+                    string p2 = Path.GetFullPath(Path.Combine(baseDir, "..", ".."));
+                    if (Directory.Exists(Path.Combine(p2, "backend"))) return p2;
+
+                    string p3 = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
+                    if (Directory.Exists(Path.Combine(p3, "backend"))) return p3;
+                }
+                catch { }
+
                 return baseDir;
             }
-
-            try
-            {
-                string p1 = Path.GetFullPath(Path.Combine(baseDir, ".."));
-                if (Directory.Exists(Path.Combine(p1, "backend"))) return p1;
-
-                string p2 = Path.GetFullPath(Path.Combine(baseDir, "..", ".."));
-                if (Directory.Exists(Path.Combine(p2, "backend"))) return p2;
-            }
-            catch { }
-
-            return baseDir;
         }
 
         private static void CopyDirectory(string sourceDir, string destinationDir)
@@ -290,23 +338,29 @@ namespace FigPin
 
             try
             {
+                Directory.CreateDirectory(backendDir);
+
                 // Step 1: Check Python installation
                 UpdateInstallProgress(15, "Step 1/5: Checking Python 3.12 installation...");
                 AppendLauncherLog("[INSTALL] Checking Python 3.12...");
                 
                 string venvPath = Path.Combine(backendDir, "FigPin");
 
-                // Locate system python or py launcher
+                // Locate system python executable
                 string pythonExe = "py";
                 string systemPy312 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python", "Python312", "python.exe");
                 if (File.Exists(systemPy312))
                 {
-                    pythonExe = $"\"{systemPy312}\"";
+                    pythonExe = systemPy312;
+                }
+                else if (File.Exists(@"C:\Python312\python.exe"))
+                {
+                    pythonExe = @"C:\Python312\python.exe";
                 }
 
                 // Step 2: Create Python Virtual Environment
                 UpdateInstallProgress(35, "Step 2/5: Creating Python virtual environment 'FigPin'...");
-                AppendLauncherLog("[INSTALL] Creating virtual environment 'FigPin'...");
+                AppendLauncherLog($"[INSTALL] Creating virtual environment 'FigPin' using {pythonExe}...");
                 
                 await RunProcessAsync(pythonExe, $"-m venv \"{venvPath}\"", backendDir, text => AppendLauncherLog(text));
 
@@ -415,9 +469,13 @@ namespace FigPin
             var tcs = new TaskCompletionSource<int>();
             try
             {
+                // Clean fileName (strip surrounding quotes if present)
+                string cleanFileName = fileName.Trim().Trim('"');
+                Directory.CreateDirectory(workingDir);
+
                 var psi = new ProcessStartInfo
                 {
-                    FileName = fileName,
+                    FileName = cleanFileName,
                     Arguments = arguments,
                     WorkingDirectory = workingDir,
                     RedirectStandardOutput = true,
