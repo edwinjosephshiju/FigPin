@@ -186,35 +186,42 @@ namespace FigPin
 
         private async Task InitializeDependencyEnvironmentAsync()
         {
-            AppendLauncherLog("======================================================================");
-            AppendLauncherLog("           FigPin Native C# Dependency & Environment Manager");
-            AppendLauncherLog("======================================================================");
-
-            string rootDir = GetProjectRootDir();
-            string backendDir = Path.Combine(rootDir, "backend");
-            string venvPython = Path.Combine(backendDir, "FigPin", "Scripts", "python.exe");
-
-            // Check if Python virtual environment exists
-            if (!File.Exists(venvPython))
+            try
             {
-                AppendLauncherLog("[INFO] Python virtual environment 'FigPin' not found. Launching Dependency Installer...");
-                await InstallDependenciesNativeAsync(rootDir, backendDir);
+                AppendLauncherLog("======================================================================");
+                AppendLauncherLog("           FigPin Native C# Dependency & Environment Manager");
+                AppendLauncherLog("======================================================================");
+
+                string rootDir = GetProjectRootDir();
+                string backendDir = Path.Combine(rootDir, "backend");
+                string venvPython = Path.Combine(backendDir, "FigPin", "Scripts", "python.exe");
+
+                // Check if Python virtual environment exists
+                if (!File.Exists(venvPython))
+                {
+                    AppendLauncherLog("[INFO] Python virtual environment 'FigPin' not found. Launching Dependency Installer...");
+                    await InstallDependenciesNativeAsync(rootDir, backendDir);
+                }
+                else
+                {
+                    AppendLauncherLog("[OK] Virtual environment 'FigPin' detected.");
+                    
+                    // Scan & verify models via download_models.py inside C# background process (stream to Tab 2)
+                    AppendLauncherLog("[INFO] Verifying AI Model Weights (BiRefNet, SAM 2, YOLO, Grounding DINO)...");
+                    string modelScript = Path.Combine(backendDir, "download_models.py");
+                    await RunProcessAsync(venvPython, $"\"{modelScript}\"", backendDir, text => AppendLauncherLog(text));
+                }
+
+                // Start FastAPI Server in Background C# process (stream to Tab 3)
+                StartBackendServer(backendDir, venvPython);
+
+                // Check server health
+                await CheckBackendHealthAsync();
             }
-            else
+            catch (Exception ex)
             {
-                AppendLauncherLog("[OK] Virtual environment 'FigPin' detected.");
-                
-                // Scan & verify models via download_models.py inside C# background process (stream to Tab 2)
-                AppendLauncherLog("[INFO] Verifying AI Model Weights (BiRefNet, SAM 2, YOLO, Grounding DINO)...");
-                string modelScript = Path.Combine(backendDir, "download_models.py");
-                await RunProcessAsync(venvPython, $"\"{modelScript}\"", backendDir, text => AppendLauncherLog(text));
+                LogCrash("InitializeDependencyEnvironmentAsync", ex);
             }
-
-            // Start FastAPI Server in Background C# process (stream to Tab 3)
-            StartBackendServer(backendDir, venvPython);
-
-            // Check server health
-            await CheckBackendHealthAsync();
         }
 
         private string GetProjectRootDir()
@@ -283,17 +290,25 @@ namespace FigPin
 
             try
             {
-                // Step 1: Install Python 3.12 via Winget
-                UpdateInstallProgress(15, "Step 1/5: Checking Python 3.12 installation via Winget...");
-                AppendLauncherLog("[INSTALL] Checking Python 3.12 via Winget...");
+                // Step 1: Check Python installation
+                UpdateInstallProgress(15, "Step 1/5: Checking Python 3.12 installation...");
+                AppendLauncherLog("[INSTALL] Checking Python 3.12...");
                 
-                await RunProcessAsync("winget", "install -e --id Python.py --accept-source-agreements --accept-package-agreements", rootDir, text => AppendLauncherLog(text));
+                string venvPath = Path.Combine(backendDir, "FigPin");
 
-                // Step 2: Create Python 3.12 Virtual Environment
+                // Locate system python or py launcher
+                string pythonExe = "py";
+                string systemPy312 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python", "Python312", "python.exe");
+                if (File.Exists(systemPy312))
+                {
+                    pythonExe = $"\"{systemPy312}\"";
+                }
+
+                // Step 2: Create Python Virtual Environment
                 UpdateInstallProgress(35, "Step 2/5: Creating Python virtual environment 'FigPin'...");
                 AppendLauncherLog("[INSTALL] Creating virtual environment 'FigPin'...");
-                string venvPath = Path.Combine(backendDir, "FigPin");
-                await RunProcessAsync("py", $"-3.12 -m venv \"{venvPath}\"", backendDir, text => AppendLauncherLog(text));
+                
+                await RunProcessAsync(pythonExe, $"-m venv \"{venvPath}\"", backendDir, text => AppendLauncherLog(text));
 
                 // Auto Switch to AI Terminal Tab
                 DispatcherQueue.TryEnqueue(() =>
@@ -307,7 +322,10 @@ namespace FigPin
                 string pipPath = Path.Combine(venvPath, "Scripts", "pip.exe");
                 string reqPath = Path.Combine(backendDir, "requirements.txt");
                 
-                await RunProcessAsync(pipPath, $"install -r \"{reqPath}\" --extra-index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+                if (File.Exists(pipPath) && File.Exists(reqPath))
+                {
+                    await RunProcessAsync(pipPath, $"install -r \"{reqPath}\" --extra-index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+                }
 
                 // Step 4: Download AI Model Weights (BiRefNet, U2Net, SAM2, YOLO)
                 UpdateInstallProgress(85, "Step 4/5: Pre-downloading AI model weights (BiRefNet, SAM 2)...");
@@ -315,7 +333,10 @@ namespace FigPin
                 string pythonPath = Path.Combine(venvPath, "Scripts", "python.exe");
                 string modelScript = Path.Combine(backendDir, "download_models.py");
                 
-                await RunProcessAsync(pythonPath, $"\"{modelScript}\"", backendDir, text => AppendLauncherLog(text));
+                if (File.Exists(pythonPath) && File.Exists(modelScript))
+                {
+                    await RunProcessAsync(pythonPath, $"\"{modelScript}\"", backendDir, text => AppendLauncherLog(text));
+                }
 
                 UpdateInstallProgress(100, "Step 5/5: Dependencies & AI Models ready!");
                 AppendLauncherLog("[SUCCESS] All dependencies & models installed successfully!");
@@ -324,6 +345,7 @@ namespace FigPin
             catch (Exception ex)
             {
                 AppendLauncherLog($"[ERROR] Dependency installation failed: {ex.Message}");
+                LogCrash("InstallDependenciesNativeAsync", ex);
             }
             finally
             {
@@ -335,21 +357,31 @@ namespace FigPin
         {
             DispatcherQueue.TryEnqueue(() =>
             {
-                _installProgressBar = new ProgressBar { Minimum = 0, Maximum = 100, Value = 0, Height = 10, CornerRadius = new CornerRadius(5) };
-                _installStatusText = new TextBlock { Text = "Initializing environment installer...", TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
-
-                var stack = new StackPanel { Spacing = 14, Width = 380 };
-                stack.Children.Add(_installStatusText);
-                stack.Children.Add(_installProgressBar);
-
-                _installDialog = new ContentDialog
+                try
                 {
-                    Title = "FigPin AI Dependency Manager",
-                    Content = stack,
-                    XamlRoot = this.Content.XamlRoot
-                };
+                    if (this.Content == null || this.Content.XamlRoot == null) return;
+                    if (_installDialog != null) return;
 
-                _ = _installDialog.ShowAsync();
+                    _installProgressBar = new ProgressBar { Minimum = 0, Maximum = 100, Value = 0, Height = 10, CornerRadius = new CornerRadius(5) };
+                    _installStatusText = new TextBlock { Text = "Initializing environment installer...", TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
+
+                    var stack = new StackPanel { Spacing = 14, Width = 380 };
+                    stack.Children.Add(_installStatusText);
+                    stack.Children.Add(_installProgressBar);
+
+                    _installDialog = new ContentDialog
+                    {
+                        Title = "FigPin AI Dependency Manager",
+                        Content = stack,
+                        XamlRoot = this.Content.XamlRoot
+                    };
+
+                    _ = _installDialog.ShowAsync();
+                }
+                catch (Exception ex)
+                {
+                    LogCrash("ShowInstallProgressDialog", ex);
+                }
             });
         }
 
@@ -366,11 +398,15 @@ namespace FigPin
         {
             DispatcherQueue.TryEnqueue(() =>
             {
-                if (_installDialog != null)
+                try
                 {
-                    _installDialog.Hide();
-                    _installDialog = null;
+                    if (_installDialog != null)
+                    {
+                        _installDialog.Hide();
+                        _installDialog = null;
+                    }
                 }
+                catch { }
             });
         }
 
@@ -420,7 +456,19 @@ namespace FigPin
                 AppendBackendLog("             Starting FastAPI AI Server (http://127.0.0.1:8000)");
                 AppendBackendLog("======================================================================");
 
+                if (!File.Exists(pythonPath))
+                {
+                    AppendBackendLog($"[SERVER ERROR] Python virtual environment executable not found at: {pythonPath}");
+                    return;
+                }
+
                 string mainScript = Path.Combine(backendDir, "main.py");
+                if (!File.Exists(mainScript))
+                {
+                    AppendBackendLog($"[SERVER ERROR] Backend main script not found at: {mainScript}");
+                    return;
+                }
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = pythonPath,
@@ -443,6 +491,7 @@ namespace FigPin
             catch (Exception ex)
             {
                 AppendBackendLog($"[SERVER ERROR] Failed to start backend server: {ex.Message}");
+                LogCrash("StartBackendServer", ex);
             }
         }
 
@@ -462,27 +511,30 @@ namespace FigPin
                 int newPotency = newIndex switch { 1 => 2, 2 => 4, 3 => 6, _ => 1 };
                 string fileName = Path.GetFileName(_currentInputFilePath);
 
-                var dialog = new ContentDialog
+                if (this.Content != null && this.Content.XamlRoot != null)
                 {
-                    Title = "Reprocess Image with New Potency?",
-                    Content = $"Do you want to reprocess '{fileName}' with {newPotency}X AI Potency?",
-                    PrimaryButtonText = "Reprocess",
-                    CloseButtonText = "Cancel",
-                    DefaultButton = ContentDialogButton.Primary,
-                    XamlRoot = this.Content.XamlRoot
-                };
+                    var dialog = new ContentDialog
+                    {
+                        Title = "Reprocess Image with New Potency?",
+                        Content = $"Do you want to reprocess '{fileName}' with {newPotency}X AI Potency?",
+                        PrimaryButtonText = "Reprocess",
+                        CloseButtonText = "Cancel",
+                        DefaultButton = ContentDialogButton.Primary,
+                        XamlRoot = this.Content.XamlRoot
+                    };
 
-                var result = await dialog.ShowAsync();
-                if (result == ContentDialogResult.Primary)
-                {
-                    _previousPotencyIndex = newIndex;
-                    await ProcessImageFileAsync(_currentInputFilePath);
-                }
-                else
-                {
-                    _isInitializingPotency = true;
-                    PotencyComboBox.SelectedIndex = _previousPotencyIndex;
-                    _isInitializingPotency = false;
+                    var result = await dialog.ShowAsync();
+                    if (result == ContentDialogResult.Primary)
+                    {
+                        _previousPotencyIndex = newIndex;
+                        await ProcessImageFileAsync(_currentInputFilePath);
+                    }
+                    else
+                    {
+                        _isInitializingPotency = true;
+                        PotencyComboBox.SelectedIndex = _previousPotencyIndex;
+                        _isInitializingPotency = false;
+                    }
                 }
             }
             else

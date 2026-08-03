@@ -17,6 +17,7 @@ namespace FigPin
                     System.IO.Directory.CreateDirectory(logDir);
                     string crashFile = System.IO.Path.Combine(logDir, "crash.log");
                     System.IO.File.AppendAllText(crashFile, $"[{DateTime.Now}] UNHANDLED EXCEPTION:\n{e.Message}\n{e.Exception}\n{e.Exception?.StackTrace}\n\n");
+                    e.Handled = true;
                 }
                 catch { }
             };
@@ -26,8 +27,22 @@ namespace FigPin
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-            m_window = new MainWindow();
-            m_window.Activate();
+            try
+            {
+                m_window = new MainWindow();
+                m_window.Activate();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    string logDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".figpin");
+                    System.IO.Directory.CreateDirectory(logDir);
+                    string crashFile = System.IO.Path.Combine(logDir, "crash.log");
+                    System.IO.File.AppendAllText(crashFile, $"[{DateTime.Now}] ONLAUNCHED EXCEPTION:\n{ex.Message}\n{ex.StackTrace}\n\n");
+                }
+                catch { }
+            }
         }
     }
 }
