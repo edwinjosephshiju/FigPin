@@ -7,8 +7,10 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -219,6 +221,88 @@ namespace FigPin
             BackendLogTextBox.Text = string.Empty;
         }
 
+        private async void RepairVenvBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (this.Content == null || this.Content.XamlRoot == null) return;
+
+            var dialog = new ContentDialog
+            {
+                Title = "Repair Virtual Environment?",
+                Content = "This will terminate the backend server, remove the existing Python virtual environment, and reinstall all AI dependencies fresh without using pip cache. Do you wish to proceed?",
+                PrimaryButtonText = "Repair Venv",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return;
+
+            try
+            {
+                RepairVenvBtn.IsEnabled = false;
+                SwitchToTab(1); // AI Terminal Logs
+                AppendLauncherLog("======================================================================");
+                AppendLauncherLog("            TRIGGERING MANUAL VENV REPAIR & FRESH DEPENDENCY INSTALL");
+                AppendLauncherLog("======================================================================");
+
+                KillBackendProcess();
+
+                string rootDir = GetProjectRootDir();
+                string backendDir = Path.Combine(rootDir, "backend");
+                string venvPath = Path.Combine(backendDir, "FigPin");
+
+                if (Directory.Exists(venvPath))
+                {
+                    AppendLauncherLog($"[REPAIR] Deleting old virtual environment at: {venvPath}");
+                    try
+                    {
+                        Directory.Delete(venvPath, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLauncherLog($"[WARNING] Error deleting venv directory: {ex.Message}");
+                    }
+                }
+
+                await InstallDependenciesNativeAsync(rootDir, backendDir);
+
+                // Start backend server again
+                string venvPython = Path.Combine(backendDir, "FigPin", "Scripts", "python.exe");
+                StartBackendServer(backendDir, venvPython);
+
+                // Check server health
+                await CheckBackendHealthAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendLauncherLog($"[ERROR] Repair Venv failed: {ex.Message}");
+                LogCrash("RepairVenvBtn_Click", ex);
+            }
+            finally
+            {
+                RepairVenvBtn.IsEnabled = true;
+            }
+        }
+
+        private void KillBackendProcess()
+        {
+            try
+            {
+                if (_backendProcess != null && !_backendProcess.HasExited)
+                {
+                    _backendProcess.Kill(true);
+                    _backendProcess.Dispose();
+                    _backendProcess = null;
+                    AppendBackendLog("[SERVER] Backend server process stopped.");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendBackendLog($"[WARNING] Error stopping backend process: {ex.Message}");
+            }
+        }
+
         #endregion
 
         #region Native C# Dependency Manager & Backend Server
@@ -235,17 +319,21 @@ namespace FigPin
                 string backendDir = Path.Combine(rootDir, "backend");
                 Directory.CreateDirectory(backendDir);
 
+                // Attempt to detect and reuse cached AI model weights from neighbour directories
+                TryReuseNeighbourModels(backendDir);
+
                 string venvPython = Path.Combine(backendDir, "FigPin", "Scripts", "python.exe");
 
-                // Check if Python virtual environment exists
-                if (!File.Exists(venvPython))
+                // Check if target Python virtual environment exists and is functional
+                bool isVenvValid = await IsVenvValidAsync(venvPython);
+                if (!isVenvValid)
                 {
-                    AppendLauncherLog("[INFO] Python virtual environment 'FigPin' not found. Launching Dependency Installer...");
+                    AppendLauncherLog("[INFO] Python virtual environment 'FigPin' missing or broken. Launching Dependency Installer...");
                     await InstallDependenciesNativeAsync(rootDir, backendDir);
                 }
                 else
                 {
-                    AppendLauncherLog("[OK] Virtual environment 'FigPin' detected.");
+                    AppendLauncherLog("[OK] Virtual environment 'FigPin' detected & verified.");
                     
                     // Scan & verify models via download_models.py inside C# background process (stream to Tab 2)
                     AppendLauncherLog("[INFO] Verifying AI Model Weights (BiRefNet, SAM 2, YOLO, Grounding DINO)...");
@@ -263,6 +351,165 @@ namespace FigPin
             {
                 LogCrash("InitializeDependencyEnvironmentAsync", ex);
             }
+        }
+
+        private List<string> GetCandidateNeighbourRoots()
+        {
+            var roots = new List<string>();
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            roots.Add(baseDir);
+
+            try
+            {
+                string packageLocalFolder = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
+                string appDataRoot = Path.Combine(packageLocalFolder, "FigPinStudio");
+                roots.Add(appDataRoot);
+            }
+            catch { }
+
+            string localAppDataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FigPinStudio");
+            roots.Add(localAppDataRoot);
+
+            try
+            {
+                string p1 = Path.GetFullPath(Path.Combine(baseDir, ".."));
+                roots.Add(p1);
+                string p2 = Path.GetFullPath(Path.Combine(baseDir, "..", ".."));
+                roots.Add(p2);
+                string p3 = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", ".."));
+                roots.Add(p3);
+            }
+            catch { }
+
+            return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private void TryReuseNeighbourModels(string targetBackendDir)
+        {
+            string targetModelsDir = Path.Combine(targetBackendDir, "models");
+            Directory.CreateDirectory(targetModelsDir);
+
+            List<string> candidateRoots = GetCandidateNeighbourRoots();
+            foreach (var root in candidateRoots)
+            {
+                string candidateModels = Path.Combine(root, "backend", "models");
+                if (!Directory.Exists(candidateModels)) continue;
+
+                if (Path.GetFullPath(candidateModels).Equals(Path.GetFullPath(targetModelsDir), StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    var subDirs = Directory.GetDirectories(candidateModels);
+                    foreach (var subDir in subDirs)
+                    {
+                        string dirName = Path.GetFileName(subDir);
+                        string targetSubDir = Path.Combine(targetModelsDir, dirName);
+                        if (!Directory.Exists(targetSubDir) || Directory.GetFiles(targetSubDir, "*", SearchOption.AllDirectories).Length == 0)
+                        {
+                            AppendLauncherLog($"[REUSE] Reusing cached AI model weights '{dirName}' from {candidateModels}...");
+                            CopyDirectory(subDir, targetSubDir);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLauncherLog($"[WARNING] Error copying candidate models from {candidateModels}: {ex.Message}");
+                }
+            }
+        }
+
+        private async Task<bool> IsVenvValidAsync(string venvPython)
+        {
+            if (!File.Exists(venvPython)) return false;
+
+            bool isValid = false;
+            try
+            {
+                int exitCode = await RunProcessAsync(venvPython, "--version", Path.GetDirectoryName(venvPython) ?? "", output =>
+                {
+                    if (!string.IsNullOrEmpty(output) && output.Contains("Python 3.12"))
+                    {
+                        isValid = true;
+                    }
+                });
+                return exitCode == 0 && isValid;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task<bool> VerifyPythonExeAsync(string pythonPath, string args = "--version")
+        {
+            try
+            {
+                bool found = false;
+                int exitCode = await RunProcessAsync(pythonPath, args, AppDomain.CurrentDomain.BaseDirectory, output =>
+                {
+                    if (!string.IsNullOrEmpty(output) && output.Contains("Python 3.12"))
+                    {
+                        found = true;
+                    }
+                });
+                return exitCode == 0 && found;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task<string?> FindSystemPython312Async()
+        {
+            string localPy312 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python", "Python312", "python.exe");
+            if (File.Exists(localPy312) && await VerifyPythonExeAsync(localPy312))
+            {
+                return localPy312;
+            }
+
+            string pfPy312 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Python312", "python.exe");
+            if (File.Exists(pfPy312) && await VerifyPythonExeAsync(pfPy312))
+            {
+                return pfPy312;
+            }
+
+            if (File.Exists(@"C:\Python312\python.exe") && await VerifyPythonExeAsync(@"C:\Python312\python.exe"))
+            {
+                return @"C:\Python312\python.exe";
+            }
+
+            if (await VerifyPythonExeAsync("py", "-3.12 --version"))
+            {
+                return "py -3.12";
+            }
+
+            if (await VerifyPythonExeAsync("python"))
+            {
+                return "python";
+            }
+
+            return null;
+        }
+
+        private async Task<bool> InstallPythonViaWingetAsync()
+        {
+            AppendLauncherLog("[INSTALL] Winget: Installing Python 3.12.8 without modifying system PATH...");
+            UpdateInstallProgress(20, "Step 1/5: Installing Python 3.12.8 via Winget (No PATH modification)...");
+
+            string wingetArgs = "install --id Python.Python.3.12 --version 3.12.8 --exact --accept-package-agreements --accept-source-agreements --scope user --override \"/passive PrependPath=0\"";
+
+            int exitCode = await RunProcessAsync("winget", wingetArgs, AppDomain.CurrentDomain.BaseDirectory, text => AppendLauncherLog(text));
+            
+            if (exitCode != 0)
+            {
+                AppendLauncherLog("[WARNING] Winget exact version install returned non-zero code. Trying default Python.3.12 installer...");
+                string fallbackArgs = "install --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements --scope user --override \"/passive PrependPath=0\"";
+                exitCode = await RunProcessAsync("winget", fallbackArgs, AppDomain.CurrentDomain.BaseDirectory, text => AppendLauncherLog(text));
+            }
+
+            return exitCode == 0;
         }
 
         private string GetProjectRootDir()
@@ -341,56 +588,128 @@ namespace FigPin
 
         private async Task InstallDependenciesNativeAsync(string rootDir, string backendDir)
         {
-            ShowInstallProgressDialog();
-
             try
             {
                 Directory.CreateDirectory(backendDir);
 
                 // Step 1: Check Python installation
-                UpdateInstallProgress(15, "Step 1/5: Checking Python 3.12 installation...");
-                AppendLauncherLog("[INSTALL] Checking Python 3.12...");
+                AppendLauncherLog("[INSTALL] Checking system Python 3.12...");
                 
                 string venvPath = Path.Combine(backendDir, "FigPin");
 
-                // Locate system python executable
-                string pythonExe = "py";
-                string systemPy312 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python", "Python312", "python.exe");
-                if (File.Exists(systemPy312))
+                bool installedViaWinget = false;
+                string? systemPython = await FindSystemPython312Async();
+                if (string.IsNullOrEmpty(systemPython))
                 {
-                    pythonExe = systemPy312;
-                }
-                else if (File.Exists(@"C:\Python312\python.exe"))
-                {
-                    pythonExe = @"C:\Python312\python.exe";
+                    // Show popup with progress bar ONLY when installing Python via Winget
+                    ShowInstallProgressDialog();
+                    UpdateInstallProgress(20, "Installing Python 3.12.8 via Winget (No PATH modification)...");
+                    AppendLauncherLog("[INSTALL] Python 3.12 not found on system. Triggering Winget installer (without adding to PATH)...");
+                    
+                    await InstallPythonViaWingetAsync();
+                    installedViaWinget = true;
+
+                    systemPython = await FindSystemPython312Async();
+
+                    if (string.IsNullOrEmpty(systemPython))
+                    {
+                        // Fallback check if winget installed to standard user LocalAppData location
+                        string defaultUserPy312 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python", "Python312", "python.exe");
+                        if (File.Exists(defaultUserPy312))
+                        {
+                            systemPython = defaultUserPy312;
+                        }
+                    }
+
+                    // Hide popup after Winget installation finishes
+                    HideInstallProgressDialog();
+
+                    if (installedViaWinget && !string.IsNullOrEmpty(systemPython))
+                    {
+                        AppendLauncherLog("======================================================================");
+                        AppendLauncherLog("[RESTART] Python 3.12.8 successfully installed via Winget!");
+                        AppendLauncherLog("[RESTART] Restarting FigPin Native C# Environment Manager shell...");
+                        AppendLauncherLog("======================================================================");
+                        await Task.Delay(1000);
+                    }
                 }
 
-                // Step 2: Create Python Virtual Environment
-                UpdateInstallProgress(35, "Step 2/5: Creating Python virtual environment 'FigPin'...");
-                AppendLauncherLog($"[INSTALL] Creating virtual environment 'FigPin' using {pythonExe}...");
-                
-                await RunProcessAsync(pythonExe, $"-m venv \"{venvPath}\"", backendDir, text => AppendLauncherLog(text));
+                if (string.IsNullOrEmpty(systemPython))
+                {
+                    throw new Exception("Python 3.12 installation could not be verified after Winget installation.");
+                }
 
-                // Auto Switch to AI Terminal Tab
+                AppendLauncherLog($"[INSTALL] Using system Python: {systemPython}");
+
+                // Switch to Tab 1 (AI Terminal) so user sees live C# environment manager progress in-app
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     SwitchToTab(1);
                 });
 
-                // Step 3: Install PyTorch & Requirements
-                UpdateInstallProgress(60, "Step 3/5: Installing PyTorch CUDA & Python dependencies...");
-                AppendLauncherLog("[INSTALL] Installing dependencies from requirements.txt...");
+                // Cleanup broken/stale virtual environment if present
+                if (Directory.Exists(venvPath))
+                {
+                    AppendLauncherLog("[INSTALL] Cleaning up stale/broken virtual environment 'FigPin'...");
+                    try
+                    {
+                        Directory.Delete(venvPath, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLauncherLog($"[WARNING] Could not delete old venv directory: {ex.Message}");
+                    }
+                }
+
+                // Step 2: Create Python Virtual Environment
+                AppendLauncherLog($"[INSTALL] Creating virtual environment 'FigPin' using {systemPython}...");
+                
+                int venvResult;
+                if (systemPython.StartsWith("py "))
+                {
+                    venvResult = await RunProcessAsync("py", $"-3.12 -m venv \"{venvPath}\"", backendDir, text => AppendLauncherLog(text));
+                }
+                else
+                {
+                    venvResult = await RunProcessAsync(systemPython, $"-m venv \"{venvPath}\"", backendDir, text => AppendLauncherLog(text));
+                }
+
+                if (venvResult != 0 || !Directory.Exists(venvPath))
+                {
+                    throw new Exception($"Failed to create virtual environment 'FigPin' using {systemPython}. Exit code: {venvResult}");
+                }
+
+                // Step 3: Install PyTorch CUDA & Requirements without cache
+                AppendLauncherLog("[INSTALL] Installing PyTorch CUDA 12.1 & AI dependencies (no-cache-dir)...");
                 string pipPath = Path.Combine(venvPath, "Scripts", "pip.exe");
                 string reqPath = Path.Combine(backendDir, "requirements.txt");
                 
-                if (File.Exists(pipPath) && File.Exists(reqPath))
+                if (File.Exists(pipPath))
                 {
-                    await RunProcessAsync(pipPath, $"install -r \"{reqPath}\" --extra-index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+                    // 3a. Install PyTorch with CUDA 12.1 wheel
+                    AppendLauncherLog("[INSTALL] Step 3a: Installing PyTorch CUDA 12.1 wheel...");
+                    await RunProcessAsync(pipPath, "install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+
+                    // 3b. Install requirements.txt without cache
+                    if (File.Exists(reqPath))
+                    {
+                        AppendLauncherLog("[INSTALL] Step 3b: Installing requirements from requirements.txt (no-cache-dir)...");
+                        await RunProcessAsync(pipPath, $"install --no-cache-dir -r \"{reqPath}\" --extra-index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+                    }
+
+                    // 3c. Ensure CUDA 12 compatible onnxruntime-gpu is active without CPU onnxruntime conflict
+                    AppendLauncherLog("[INSTALL] Step 3c: Configuring CUDA 12 compatible ONNX Runtime GPU engine...");
+                    await RunProcessAsync(pipPath, "uninstall -y onnxruntime onnxruntime-gpu", backendDir, text => AppendLauncherLog(text));
+                    await RunProcessAsync(pipPath, "install --no-cache-dir \"onnxruntime-gpu<1.20.0\"", backendDir, text => AppendLauncherLog(text));
                 }
 
                 // Step 4: Download AI Model Weights (BiRefNet, U2Net, SAM2, YOLO)
-                UpdateInstallProgress(85, "Step 4/5: Pre-downloading AI model weights (BiRefNet, SAM 2)...");
                 AppendLauncherLog("[INSTALL] Running download_models.py...");
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    SwitchToTab(2); // Switch to Model Weights tab
+                });
+
                 string pythonPath = Path.Combine(venvPath, "Scripts", "python.exe");
                 string modelScript = Path.Combine(backendDir, "download_models.py");
                 
@@ -399,7 +718,6 @@ namespace FigPin
                     await RunProcessAsync(pythonPath, $"\"{modelScript}\"", backendDir, text => AppendLauncherLog(text));
                 }
 
-                UpdateInstallProgress(100, "Step 5/5: Dependencies & AI Models ready!");
                 AppendLauncherLog("[SUCCESS] All dependencies & models installed successfully!");
                 await Task.Delay(1000);
             }
@@ -517,6 +835,9 @@ namespace FigPin
         {
             try
             {
+                KillBackendProcess();
+                KillExistingPort8000Process();
+
                 AppendBackendLog("======================================================================");
                 AppendBackendLog("             Starting FastAPI AI Server (http://127.0.0.1:8000)");
                 AppendBackendLog("======================================================================");
@@ -558,6 +879,23 @@ namespace FigPin
                 AppendBackendLog($"[SERVER ERROR] Failed to start backend server: {ex.Message}");
                 LogCrash("StartBackendServer", ex);
             }
+        }
+
+        private void KillExistingPort8000Process()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c \"for /f \"tokens=5\" %a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do taskkill /F /PID %a\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                using var proc = Process.Start(psi);
+                proc?.WaitForExit(2000);
+            }
+            catch { }
         }
 
         #endregion
@@ -720,8 +1058,19 @@ namespace FigPin
         private async Task ProcessImageFileAsync(string filePath)
         {
             _currentInputFilePath = filePath;
-            DropPrompt.Visibility = Visibility.Collapsed;
-            InputPreviewGrid.Visibility = Visibility.Collapsed;
+            
+            try
+            {
+                InputPreviewImage.Source = new BitmapImage(new Uri(filePath, UriKind.Absolute));
+                InputPreviewGrid.Visibility = Visibility.Visible;
+                DropPrompt.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error setting preview image bitmap: {ex.Message}");
+                DropPrompt.Visibility = Visibility.Visible;
+            }
+
             LoadingState.Visibility = Visibility.Visible;
             NoLayersPlaceholder.Visibility = Visibility.Visible;
             LayersScrollViewer.Visibility = Visibility.Collapsed;
@@ -808,8 +1157,14 @@ namespace FigPin
 
                         RenderLayersUI(root);
 
-                        InputPreviewImage.Source = new BitmapImage(new Uri(originalFilePath));
+                        try
+                        {
+                            InputPreviewImage.Source = new BitmapImage(new Uri(originalFilePath, UriKind.Absolute));
+                        }
+                        catch { }
+
                         InputPreviewGrid.Visibility = Visibility.Visible;
+                        DropPrompt.Visibility = Visibility.Collapsed;
 
                         NoLayersPlaceholder.Visibility = Visibility.Collapsed;
                         LayersScrollViewer.Visibility = Visibility.Visible;
@@ -972,8 +1327,15 @@ namespace FigPin
 
         private void ShowErrorState(string errorMessage)
         {
-            DropPrompt.Visibility = Visibility.Collapsed;
-            FooterInfoText.Text = errorMessage;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (InputPreviewGrid.Visibility != Visibility.Visible)
+                {
+                    DropPrompt.Visibility = Visibility.Visible;
+                }
+                LoadingState.Visibility = Visibility.Collapsed;
+                FooterInfoText.Text = errorMessage;
+            });
         }
 
         private void ExportBtn_Click(object sender, RoutedEventArgs e)

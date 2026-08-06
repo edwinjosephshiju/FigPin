@@ -3,6 +3,15 @@ import cv2
 import numpy as np
 from PIL import Image
 
+try:
+    import torch
+    if hasattr(os, 'add_dll_directory'):
+        torch_lib = os.path.join(os.path.dirname(torch.__file__), 'lib')
+        if os.path.exists(torch_lib):
+            os.add_dll_directory(torch_lib)
+except Exception:
+    pass
+
 class SubjectSegmenter:
     """Extracts foreground subjects using BiRefNet (topology-aware) with high-precision sub-pixel edge refinement."""
 
@@ -15,8 +24,9 @@ class SubjectSegmenter:
             try:
                 from rembg import new_session
                 print("[Segmentation] Loading BiRefNet model (topology-aware, sub-pixel edge precision)...")
-                SubjectSegmenter._birefnet_session = new_session("birefnet-general")
-                print("[Segmentation] BiRefNet session ready.")
+                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                SubjectSegmenter._birefnet_session = new_session("birefnet-general", providers=providers)
+                print("[Segmentation] BiRefNet session ready with CUDA support.")
             except Exception as e:
                 print(f"[Segmentation] BiRefNet session failed: {e}")
         return SubjectSegmenter._birefnet_session
@@ -26,7 +36,8 @@ class SubjectSegmenter:
         if SubjectSegmenter._u2net_session is None:
             try:
                 from rembg import new_session
-                SubjectSegmenter._u2net_session = new_session("u2net")
+                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                SubjectSegmenter._u2net_session = new_session("u2net", providers=providers)
             except Exception as e:
                 print(f"[Segmentation] U2Net session failed: {e}")
         return SubjectSegmenter._u2net_session

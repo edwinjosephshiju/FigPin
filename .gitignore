@@ -26,6 +26,7 @@ backend/models/
 output/
 test*.psd
 test*.png
+backend/test_output/
 
 # Certificate PFX files
 *.pfx

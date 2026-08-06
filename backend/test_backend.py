@@ -4,7 +4,7 @@ import sys
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pipeline import process_poster
+from pipeline.orchestrator import DeconstructionPipeline
 
 def test_pipeline():
     sample_image = os.path.abspath("../FigPin.png")
@@ -16,7 +16,7 @@ def test_pipeline():
 
     print(f"Testing pipeline with sample image: {sample_image}")
     try:
-        manifest = process_poster(sample_image, output_dir)
+        manifest = DeconstructionPipeline().process_poster(sample_image, output_dir)
         print("Pipeline Execution Succeeded!")
         print("Manifest Output:")
         print(manifest)

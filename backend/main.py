@@ -40,9 +40,20 @@ def health_check():
             device_name = torch.cuda.get_device_name(0)
     except Exception:
         pass
+
+    ort_gpu = False
+    try:
+        import onnxruntime as ort
+        if 'CUDAExecutionProvider' in ort.get_available_providers():
+            ort_gpu = True
+    except Exception:
+        pass
+
     return {
         "status": "ok", 
-        "gpu_available": gpu_available, 
+        "gpu_available": gpu_available and ort_gpu, 
+        "torch_cuda": gpu_available,
+        "ort_cuda": ort_gpu,
         "device_name": device_name,
         "version": "2.0.0"
     }

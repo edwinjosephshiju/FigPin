@@ -140,17 +140,20 @@
                                     <Button x:Name="BrowseBtn" Content="Browse Image File" Click="BrowseBtn_Click" HorizontalAlignment="Center" Margin="0,8,0,0" Style="{StaticResource AccentButtonStyle}" Padding="16,8"/>
                                 </StackPanel>
 
-                                <!-- Live Percentage Loading State -->
-                                <StackPanel x:Name="LoadingState" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="18" Visibility="Collapsed" Width="280">
-                                    <ProgressRing x:Name="LoadingRing" IsActive="True" Width="52" Height="52"/>
-                                    
-                                    <ProgressBar x:Name="ProcessingProgressBar" Minimum="0" Maximum="100" Value="0" Height="10" CornerRadius="5"/>
+                                <!-- Live Percentage Loading State Overlay -->
+                                <Border x:Name="LoadingState" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                        Background="#F0111113" CornerRadius="14" Padding="24,20" BorderBrush="#3F3F46" BorderThickness="1" Canvas.ZIndex="10">
+                                    <StackPanel Spacing="16" Width="280">
+                                        <ProgressRing x:Name="LoadingRing" IsActive="True" Width="48" Height="48" HorizontalAlignment="Center"/>
+                                        
+                                        <ProgressBar x:Name="ProcessingProgressBar" Minimum="0" Maximum="100" Value="0" Height="10" CornerRadius="5"/>
 
-                                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                                        <TextBlock x:Name="ProgressPercentText" Text="0%" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" FontWeight="Bold" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}"/>
-                                        <TextBlock x:Name="ProcessingStatusText" Text="Separating Layers..." Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                        <StackPanel Spacing="4" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="ProgressPercentText" Text="0%" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" FontWeight="Bold" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}"/>
+                                            <TextBlock x:Name="ProcessingStatusText" Text="Separating Layers..." Style="{StaticResource BodyStrongTextBlockStyle}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                        </StackPanel>
                                     </StackPanel>
-                                </StackPanel>
+                                </Border>
 
                                 <!-- Input Image Loaded Preview -->
                                 <Grid x:Name="InputPreviewGrid" Visibility="Collapsed">
@@ -208,7 +211,10 @@
                                     <FontIcon Glyph="&#xE756;" Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" FontSize="18"/>
                                     <TextBlock Text="FigPin Layer Separator Studio - AI Terminal Logs" FontWeight="Bold" Style="{StaticResource SubtitleTextBlockStyle}"/>
                                 </StackPanel>
-                                <Button Content="Clear Logs" Click="ClearLauncherLogs_Click" HorizontalAlignment="Right" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" Padding="10,4"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                    <Button x:Name="RepairVenvBtn" Content="Repair Venv" Click="RepairVenvBtn_Click" Style="{StaticResource AccentButtonStyle}" Padding="12,4"/>
+                                    <Button Content="Clear Logs" Click="ClearLauncherLogs_Click" Style="{StaticResource DateTimePickerFlyoutButtonStyle}" Padding="10,4"/>
+                                </StackPanel>
                             </Grid>
 
                             <ScrollViewer Grid.Row="1" x:Name="LauncherLogScrollViewer" VerticalScrollBarVisibility="Auto">
