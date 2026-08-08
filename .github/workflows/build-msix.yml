@@ -32,9 +32,10 @@ jobs:
         $certBase64 = "${{ secrets.MSIX_PFX_BASE64 }}"
         if ([string]::IsNullOrEmpty($certBase64)) {
             Write-Host "Generating Store Partner Center Developer Certificate..."
-            $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=808D8BE3-D2A5-4CF6-9F6D-0B5358B6FE53" -FriendlyName "FigPinStoreDev" -CertStoreLocation "Cert:\CurrentUser\My"
+            $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=808D8BE3-D2A5-4CF6-9F6D-0B5358B6FE53" -KeyUsage DigitalSignature -FriendlyName "FigPinStoreDev" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
             $pwd = ConvertTo-SecureString -String "FigPin123!" -Force -AsPlainText
             Export-PfxCertificate -Cert $cert -FilePath "$env:GITHUB_WORKSPACE\FigPinStoreDev.pfx" -Password $pwd
+            Export-Certificate -Cert $cert -FilePath "$env:GITHUB_WORKSPACE\FigPinStoreDev.cer"
         } else {
             Write-Host "Decoding secret certificate..."
             $bytes = [System.Convert]::FromBase64String($certBase64)
@@ -63,6 +64,10 @@ jobs:
         New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\release_assets"
         Copy-Item -Path "$($msixFile.FullName)" -Destination "$env:GITHUB_WORKSPACE\release_assets\edwinjoseph.FigPin_0.1.0.0_x64.msix" -Force
         
+        if (Test-Path "$env:GITHUB_WORKSPACE\FigPinStoreDev.cer") {
+            Copy-Item -Path "$env:GITHUB_WORKSPACE\FigPinStoreDev.cer" -Destination "$env:GITHUB_WORKSPACE\release_assets\FigPinStoreDev.cer" -Force
+        }
+        
         if (Test-Path "$env:GITHUB_WORKSPACE\dist\installer\Install_FigPin_Local.ps1") {
             Copy-Item -Path "$env:GITHUB_WORKSPACE\dist\installer\Install_FigPin_Local.ps1" -Destination "$env:GITHUB_WORKSPACE\release_assets\Install_FigPin_Local.ps1" -Force
         }
@@ -83,7 +88,7 @@ jobs:
           ## 🚀 FigPin Layer Separator Studio v0.1.0 Release
 
           ### 📦 Installation Options:
-          1. **1-Click Local Sideload**: Download `Install_FigPin_Local.ps1` and `edwinjoseph.FigPin_0.1.0.0_x64.msix` into the same folder. Right-click `Install_FigPin_Local.ps1` -> **Run with PowerShell**.
+          1. **1-Click Local Sideload**: Download `Install_FigPin_Local.ps1`, `FigPinStoreDev.cer`, and `edwinjoseph.FigPin_0.1.0.0_x64.msix` into the same folder. Right-click `Install_FigPin_Local.ps1` -> **Run with PowerShell**.
           2. **Direct MSIX Install**: Double-click `edwinjoseph.FigPin_0.1.0.0_x64.msix` to install.
 
           ### ✨ Key Features:
@@ -94,6 +99,7 @@ jobs:
         files: |
           release_assets/edwinjoseph.FigPin_0.1.0.0_x64.msix
           release_assets/Install_FigPin_Local.ps1
+          release_assets/FigPinStoreDev.cer
         draft: false
         prerelease: false
         overwrite_files: true

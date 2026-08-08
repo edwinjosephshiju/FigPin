@@ -1,5 +1,5 @@
 # FigPin Local Sideloading Installer Script
-# Self-elevates to administrator, extracts & trusts certificate from MSIX container, enables sideloading, and installs FigPin App
+# Self-elevates to administrator, extracts & trusts certificate from MSIX container into TrustedPeople and TrustedRoot stores, enables sideloading, and installs FigPin App
 
 $msixPath = "$PSScriptRoot\edwinjoseph.FigPin_0.1.0.0_x64.msix"
 $cerPath  = "$PSScriptRoot\FigPinStoreDev.cer"
@@ -8,6 +8,9 @@ Write-Host "====================================================================
 Write-Host "             FigPin Studio - Local MSIX Package Installer" -ForegroundColor Cyan
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host ""
+
+# Unblock files downloaded from Web (remove Zone.Identifier Mark-Of-The-Web)
+Get-ChildItem -Path $PSScriptRoot -Recurse | Unblock-File -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $msixPath)) {
     # Search for any *.msix in current folder
@@ -42,7 +45,7 @@ if (-not (Test-Path $cerPath)) {
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "[INFO] Requesting Administrator elevation to trust certificate..." -ForegroundColor Yellow
-    Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    Start-Process powershell -Verb RunAs -WorkingDirectory "$PSScriptRoot" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
     Exit
 }
 
@@ -57,12 +60,21 @@ try {
         Write-Host "[OK] Windows Sideloading enabled." -ForegroundColor Green
     } catch { }
 
-    Write-Host "[2/3] Importing Developer Certificate into Local Machine Trusted Root..." -ForegroundColor Yellow
+    Write-Host "[2/3] Importing Developer Certificate into Trusted People & Trusted Root stores..." -ForegroundColor Yellow
     if (Test-Path $cerPath) {
+        Unblock-File -Path $cerPath -ErrorAction SilentlyContinue
+        
+        # Import to TrustedPeople (Required for Windows AppX/MSIX package deployment)
+        Import-Certificate -FilePath $cerPath -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
+        Import-Certificate -FilePath $cerPath -CertStoreLocation "Cert:\CurrentUser\TrustedPeople" | Out-Null
+        certutil -addstore -f "TrustedPeople" "$cerPath" | Out-Null
+
+        # Import to Trusted Root Certification Authorities
         Import-Certificate -FilePath $cerPath -CertStoreLocation "Cert:\LocalMachine\Root" | Out-Null
         Import-Certificate -FilePath $cerPath -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
         certutil -addstore -f "Root" "$cerPath" | Out-Null
-        Write-Host "[OK] Certificate trusted on local system." -ForegroundColor Green
+        
+        Write-Host "[OK] Certificate trusted in Trusted People & Trusted Root stores." -ForegroundColor Green
     } else {
         Write-Host "[ERROR] Certificate file missing: $cerPath" -ForegroundColor Red
         Pause
@@ -79,6 +91,7 @@ try {
         Remove-AppxPackage -Package $existingPackage.PackageFullName -ErrorAction SilentlyContinue
     }
 
+    Unblock-File -Path $msixPath -ErrorAction SilentlyContinue
     Add-AppxPackage -Path $msixPath -ForceUpdateFromAnyVersion -ErrorAction Stop
     
     Write-Host ""
