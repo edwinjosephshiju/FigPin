@@ -228,7 +228,7 @@ namespace FigPin
             var dialog = new ContentDialog
             {
                 Title = "Repair Virtual Environment?",
-                Content = "This will terminate the backend server, remove the existing Python virtual environment, and reinstall all AI dependencies fresh without using pip cache. Do you wish to proceed?",
+                Content = "This will terminate the backend server, remove the existing Python virtual environment, and reinstall all AI dependencies using the pip cache for fast setup. Do you wish to proceed?",
                 PrimaryButtonText = "Repair Venv",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary,
@@ -679,8 +679,8 @@ namespace FigPin
                     throw new Exception($"Failed to create virtual environment 'FigPin' using {systemPython}. Exit code: {venvResult}");
                 }
 
-                // Step 3: Install PyTorch CUDA & Requirements without cache
-                AppendLauncherLog("[INSTALL] Installing PyTorch CUDA 12.1 & AI dependencies (no-cache-dir)...");
+                // Step 3: Install PyTorch CUDA & Requirements with pip cache enabled
+                AppendLauncherLog("[INSTALL] Installing PyTorch CUDA 12.1 & AI dependencies (using pip cache)...");
                 string pipPath = Path.Combine(venvPath, "Scripts", "pip.exe");
                 string reqPath = Path.Combine(backendDir, "requirements.txt");
                 
@@ -688,19 +688,19 @@ namespace FigPin
                 {
                     // 3a. Install PyTorch with CUDA 12.1 wheel
                     AppendLauncherLog("[INSTALL] Step 3a: Installing PyTorch CUDA 12.1 wheel...");
-                    await RunProcessAsync(pipPath, "install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+                    await RunProcessAsync(pipPath, "install torch torchvision --index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
 
-                    // 3b. Install requirements.txt without cache
+                    // 3b. Install requirements.txt with pip cache
                     if (File.Exists(reqPath))
                     {
-                        AppendLauncherLog("[INSTALL] Step 3b: Installing requirements from requirements.txt (no-cache-dir)...");
-                        await RunProcessAsync(pipPath, $"install --no-cache-dir -r \"{reqPath}\" --extra-index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
+                        AppendLauncherLog("[INSTALL] Step 3b: Installing requirements from requirements.txt (using pip cache)...");
+                        await RunProcessAsync(pipPath, $"install -r \"{reqPath}\" --extra-index-url https://download.pytorch.org/whl/cu121", backendDir, text => AppendLauncherLog(text));
                     }
 
                     // 3c. Ensure CUDA 12 compatible onnxruntime-gpu is active without CPU onnxruntime conflict
                     AppendLauncherLog("[INSTALL] Step 3c: Configuring CUDA 12 compatible ONNX Runtime GPU engine...");
                     await RunProcessAsync(pipPath, "uninstall -y onnxruntime onnxruntime-gpu", backendDir, text => AppendLauncherLog(text));
-                    await RunProcessAsync(pipPath, "install --no-cache-dir \"onnxruntime-gpu<1.20.0\"", backendDir, text => AppendLauncherLog(text));
+                    await RunProcessAsync(pipPath, "install \"onnxruntime-gpu<1.20.0\"", backendDir, text => AppendLauncherLog(text));
                 }
 
                 // Step 4: Download AI Model Weights (BiRefNet, U2Net, SAM2, YOLO)
