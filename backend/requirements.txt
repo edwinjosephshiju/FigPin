@@ -6,5 +6,6 @@ opencv-python
 rembg
 onnxruntime-gpu<1.20.0
 psd-tools
+pytoshop
 pillow
 
