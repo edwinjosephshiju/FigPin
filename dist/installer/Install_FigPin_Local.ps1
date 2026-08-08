@@ -1,8 +1,9 @@
 # FigPin Local Sideloading Installer Script
 # Self-elevates to administrator, extracts & trusts certificate from MSIX container into TrustedPeople and TrustedRoot stores, enables sideloading, and installs FigPin App
 
-$msixPath = "$PSScriptRoot\edwinjoseph.FigPin_0.1.0.0_x64.msix"
-$cerPath  = "$PSScriptRoot\FigPinStoreDev.cer"
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+$msixPath = "$scriptDir\edwinjoseph.FigPin_0.1.0.0_x64.msix"
+$cerPath  = "$scriptDir\FigPinStoreDev.cer"
 
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host "             FigPin Studio - Local MSIX Package Installer" -ForegroundColor Cyan
@@ -10,15 +11,15 @@ Write-Host "====================================================================
 Write-Host ""
 
 # Unblock files downloaded from Web (remove Zone.Identifier Mark-Of-The-Web)
-Get-ChildItem -Path $PSScriptRoot -Recurse | Unblock-File -ErrorAction SilentlyContinue
+Get-ChildItem -Path $scriptDir -Recurse | Unblock-File -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $msixPath)) {
     # Search for any *.msix in current folder
-    $foundMsix = Get-ChildItem -Path $PSScriptRoot -Filter "*.msix" | Select-Object -First 1
+    $foundMsix = Get-ChildItem -Path $scriptDir -Filter "*.msix" | Select-Object -First 1
     if ($null -ne $foundMsix) {
         $msixPath = $foundMsix.FullName
     } else {
-        Write-Host "[ERROR] Could not find MSIX package file in: $PSScriptRoot" -ForegroundColor Red
+        Write-Host "[ERROR] Could not find MSIX package file in: $scriptDir" -ForegroundColor Red
         Pause
         Exit
     }
@@ -45,7 +46,8 @@ if (-not (Test-Path $cerPath)) {
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host "[INFO] Requesting Administrator elevation to trust certificate..." -ForegroundColor Yellow
-    Start-Process powershell -Verb RunAs -WorkingDirectory "$PSScriptRoot" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    $scriptToRun = if ($PSCommandPath) { $PSCommandPath } else { "$scriptDir\Install_FigPin_Local.ps1" }
+    Start-Process powershell -Verb RunAs -WorkingDirectory "$scriptDir" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptToRun`"")
     Exit
 }
 

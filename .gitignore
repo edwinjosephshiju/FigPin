@@ -2,7 +2,7 @@
 bin/
 obj/
 dist/
-!dist/installer/Install_FigPin_Local.ps1
+!dist/installer/
 *.user
 *.suo
 *.userosscache

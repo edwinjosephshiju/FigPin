@@ -71,6 +71,9 @@ jobs:
         if (Test-Path "$env:GITHUB_WORKSPACE\dist\installer\Install_FigPin_Local.ps1") {
             Copy-Item -Path "$env:GITHUB_WORKSPACE\dist\installer\Install_FigPin_Local.ps1" -Destination "$env:GITHUB_WORKSPACE\release_assets\Install_FigPin_Local.ps1" -Force
         }
+        if (Test-Path "$env:GITHUB_WORKSPACE\dist\installer\Install_FigPin.bat") {
+            Copy-Item -Path "$env:GITHUB_WORKSPACE\dist\installer\Install_FigPin.bat" -Destination "$env:GITHUB_WORKSPACE\release_assets\Install_FigPin.bat" -Force
+        }
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
@@ -88,8 +91,9 @@ jobs:
           ## 🚀 FigPin Layer Separator Studio v0.1.0 Release
 
           ### 📦 Installation Options:
-          1. **1-Click Local Sideload**: Download `Install_FigPin_Local.ps1`, `FigPinStoreDev.cer`, and `edwinjoseph.FigPin_0.1.0.0_x64.msix` into the same folder. Right-click `Install_FigPin_Local.ps1` -> **Run with PowerShell**.
-          2. **Direct MSIX Install**: Double-click `edwinjoseph.FigPin_0.1.0.0_x64.msix` to install.
+          1. **1-Click Batch Sideload (Recommended)**: Download `Install_FigPin.bat`, `Install_FigPin_Local.ps1`, `FigPinStoreDev.cer`, and `edwinjoseph.FigPin_0.1.0.0_x64.msix` into the same folder. Double-click **Install_FigPin.bat**.
+          2. **PowerShell Sideload**: Right-click `Install_FigPin_Local.ps1` -> **Run with PowerShell**.
+          3. **Direct MSIX Install**: Double-click `edwinjoseph.FigPin_0.1.0.0_x64.msix` to install.
 
           ### ✨ Key Features:
           - Topology-Aware AI Subject Segmentation (BiRefNet + Sub-pixel Edge Refinement for 1X, 2X, 4X, 6X potencies)
@@ -98,6 +102,7 @@ jobs:
           - Outputs saved directly to `Downloads\FigPin outputs`
         files: |
           release_assets/edwinjoseph.FigPin_0.1.0.0_x64.msix
+          release_assets/Install_FigPin.bat
           release_assets/Install_FigPin_Local.ps1
           release_assets/FigPinStoreDev.cer
         draft: false
